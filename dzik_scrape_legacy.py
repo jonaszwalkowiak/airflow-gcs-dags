@@ -1,13 +1,13 @@
-from datetime import datetime
 import requests
+from datetime import datetime
 from airflow.decorators import dag, task
 from google.cloud import storage
 
 @dag(
-    dag_id='dzik_scrape_legacy',
-    tags=['dzik'],
-    default_args={'owner': 'JW'},
-    schedule='40 */4 * * *',
+    dag_id="dzik_scrape",
+    tags=["dzik"],
+    default_args={"owner": "JW"},
+    schedule="40 */4 * * *",
     catchup=False,
     start_date=datetime(2025, 1, 1),
     end_date=datetime(2030, 1, 1),
@@ -15,7 +15,7 @@ from google.cloud import storage
 
 def dag_creator():
 
-    bucket_name = 'dzik-scrape'
+    bucket_name = "dzik-scrape"
 
     @task
     def list_blobs(bucket_name):
@@ -25,13 +25,13 @@ def dag_creator():
         file_names = [blob.name for blob in blobs]
 
         if not file_names:
-            print('No files, starting from 0')
+            print("No files, starting from 0")
             starter_point = 0
         else:
             file_names.sort(key=lambda x: int(x[:-4]))
             starter_point = int(file_names[-1][:-4])
 
-        print('Starter point: ', starter_point)
+        print("Starter point: ", starter_point)
         return starter_point
 
     @task
@@ -41,17 +41,17 @@ def dag_creator():
         discord_package = []
 
         while failed_attempts < 500:
-            for extension in ['jpg', 'png']:
-                url = f'https://wkdzik.pl/userdata/public/gfx/{counter}/mango-szare.{extension}'
-                file_name = f'{counter}.jpg'
+            for extension in ["jpg", "png"]:
+                url = f"https://wkdzik.pl/userdata/public/gfx/{counter}/mango-szare.{extension}"
+                file_name = f"{counter}.jpg"
                 response = requests.get(url)
                 if response.status_code == 200:
                     storage_client = storage.Client()
                     contents = response.content
                     bucket = storage_client.bucket(bucket_name)
                     blob = bucket.blob(file_name)
-                    blob.upload_from_string(contents, content_type='image')
-                    print('Downloaded image: ', counter, '[', extension, ']')
+                    blob.upload_from_string(contents, content_type="image")
+                    print("Downloaded image: ", counter, "[", extension, "]")
 
                     discord_package.append(file_name)
 
@@ -59,18 +59,18 @@ def dag_creator():
                     counter += 1
                     break
                 else:
-                    print('No image in:', counter, '[', extension, ']', '| Failed attempts: ', failed_attempts)
+                    print("No image in:", counter, "[", extension, "]", "| Failed attempts: ", failed_attempts)
             else:
                 failed_attempts += 1
                 counter += 1
 
-        print(f'End of downloading after {failed_attempts} failed attempts.')
+        print(f"End of downloading after {failed_attempts} failed attempts.")
         return discord_package
 
     @task
     def send_image_message(discord_package):
 
-        webhook_url = 'https://discord.com/api/webhooks/xxx/xxx'
+        webhook_url = "https://discord.com/api/webhooks/1377340914812457021/T_QOZoeo0p0gyE_uYWCxFcdqN5GumUpNesN-Ps8eArxTsiEhNB3s52wc4VFH3cRNiNAB"
 
         storage_client = storage.Client()
         bucket = storage_client.bucket(bucket_name)
@@ -81,20 +81,20 @@ def dag_creator():
                 image_bytes = blob.download_as_bytes()
 
                 files = {
-                    'file': (file, image_bytes)
+                    "file": (file, image_bytes)
                 }
                 data = {
-                    'content': f'[#] {file}'
+                    "content": f"[#] {file}"
                 }
 
                 response = requests.post(webhook_url, data=data, files=files)
 
                 if response.status_code == 204:
-                    print(f'Wysłano {file} na Discorda.')
+                    print(f"Wysłano {file} na Discorda.")
                 else:
-                    print(f'Błąd wysyłania {file}: {response.status_code} {response.text}')
+                    print(f"Błąd wysyłania {file}: {response.status_code} {response.text}")
             except:
-                print('ERROR')
+                print("ERROR")
 
 
     starter_point = list_blobs(bucket_name)
